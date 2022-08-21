@@ -44,11 +44,13 @@
 (defn $deref
   [document {:strs [$ref]
              :as   object}]
-  (merge (into {}
-           (remove (comp #{"$ref"} key))
-           object)
-    (when $ref
-      ($deref document (get-in document (json-pointer->path $ref))))))
+  (if-not (get object "$ref")
+    object
+    (merge (into {}
+             (remove (comp #{"$ref"} key))
+             object)
+      (when $ref
+        ($deref document (get-in document (json-pointer->path $ref)))))))
 
 
 (defn path-regex
@@ -77,39 +79,77 @@
       (when params-names
         {::path-params (zipmap params-names
                          (rest match))}))))
-(defn ->ring-handler
+
+(defn parameters->object-schema
+  [params]
+  (when (seq params)
+    {"type"       "object"
+     "properties" (into {}
+                    (for [{:strs [schema name]} params]
+                      [name schema]))
+     "required"   (vec (for [{:strs [required name]} params
+                             :when required]
+                         name))}))
+
+(defn compile-routes
   [{::keys [document handlers]}]
-  (let [not-implemented (constantly {:status 503})
-        routes (into {}
-                 (map (fn [[k vs]]
-                        [k (mapv second vs)]))
-                 (group-by first
-                   (for [[path $path-item] (get document "paths")
-                         :let [path-item ($deref document $path-item)]
-                         [method $operation] (select-keys path-item http-methods)
-                         :let [operation ($deref document $operation)
-                               $ref (path->json-pointer ["paths" path method])
-                               handler-id (or (get operation "operationId")
-                                            $ref)
-                               handler (get handlers handler-id not-implemented)
-                               params-names (mapv keyword (path-params-names path))]]
-                     [(keyword method) (merge {::path-re   (re-pattern (path-regex path))
-                                               ::handler   handler
-                                               ::operation operation}
-                                         (when (seq params-names)
-                                           {::params-names params-names}))])))
+  (let [not-implemented (constantly {:status 503})]
+    (into {}
+      (map (fn [[k vs]]
+             [k (mapv second vs)]))
+      (group-by first
+        (for [[path-pattern $path-item] (get document "paths")
+              :let [path-item ($deref document $path-item)]
+              [method $operation] (select-keys path-item http-methods)
+              :let [operation ($deref document $operation)
+                    {:keys [query header cookie path]} (group-by (fn [{:strs [in]}]
+                                                                   (keyword in))
+                                                         (map (partial $deref document)
+                                                           (concat
+                                                             (get path-item "parameters")
+                                                             (get operation "parameters"))))
+                    handler (get handlers (or (get operation "operationId")
+                                            (path->json-pointer ["paths" path-pattern method]))
+                              not-implemented)
+                    params-names (path-params-names path-pattern)]]
+          [(keyword method) (merge {::path-re   (re-pattern (path-regex path-pattern))
+                                    ::handler   handler
+                                    ::operation operation}
+                              (when (seq query)
+                                {::query-schema (parameters->object-schema query)})
+                              (when (seq header)
+                                {::header-schema (parameters->object-schema header)})
+                              (when (seq cookie)
+                                {::cookie-schema (parameters->object-schema cookie)})
+                              (when (seq params-names)
+                                (let [path-param-by-name (into {}
+                                                           (map (juxt #(get % "name")
+                                                                  identity))
+                                                           path)]
+                                  {::params-schema (parameters->object-schema
+                                                     (for [param params-names]
+                                                       {"name"     param
+                                                        "required" true
+                                                        "schema"   (get path-param-by-name param
+                                                                     {"type" "string"})}))
+                                   ::params-names  params-names})))])))))
+
+(defn ->ring-handler
+  [opts]
+  (let [routes (compile-routes opts)
         not-found (constantly {:status 404})]
     (fn [{:keys [uri request-method]
           :as   ring-request}]
-      (let [{::keys [operation path-params handler]
+      (let [{::keys [operation path-params handler params-schema]
              :or    {handler not-found}} (some (partial match-route? uri)
                                            (get routes request-method))
             {:keys [content]
              :as   ring-response} (handler (merge ring-request
                                              (when operation
                                                {::operation operation})
-                                             (when path-params
-                                               {::path-params path-params})))]
+                                             (when params-schema
+                                               {::params-schema params-schema
+                                                ::path-params   path-params})))]
         (merge (select-keys ring-response [:status :headers :body])
           (when (contains? ring-response :content)
             {:body (reify rcp/StreamableResponseBody

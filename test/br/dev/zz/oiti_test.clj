@@ -70,7 +70,7 @@
                                                         :responses   {:default default-response}}}})
         handler (-> {::oiti/document document
                      ::oiti/handlers {"hello" (fn [{::oiti/keys [path-params]}]
-                                                {:content {:hello (:who path-params)}
+                                                {:content {:hello (get path-params "who")}
                                                  :status  200})}}
                   oiti/->ring-handler)]
     (is (= {:content {:hello "world's"}

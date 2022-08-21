@@ -44,7 +44,7 @@ Differently from all others ring-openapi clojure implementations, the routes are
        ::oiti/handlers {"hello-op" (fn [{::oiti/keys [path-params]}]
                                     ;; as the path defines `who` parameter, it will be present in here.
                                     ;; all other ring keys, like :uri, :request-method, will be availble too.
-                                    {:content {:hello (:who path-params)}
+                                    {:content {:hello (get path-params "who")}
                                      :status  200})}}
     oiti/->ring-handler))
 
