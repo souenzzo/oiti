@@ -134,22 +134,29 @@
                                                                      {"type" "string"})}))
                                    ::params-names  params-names})))])))))
 
+(defn match-route!
+  [{::keys [operation path-params params-schema]}
+   {:keys [uri request-method]
+    :as   ring-request}]
+  (merge ring-request
+    (when operation
+      {::operation operation})
+    (when params-schema
+      {::params-schema params-schema
+       ::path-params   path-params})))
+
 (defn ->ring-handler
   [opts]
   (let [routes (compile-routes opts)
         not-found (constantly {:status 404})]
     (fn [{:keys [uri request-method]
           :as   ring-request}]
-      (let [{::keys [operation path-params handler params-schema]
-             :or    {handler not-found}} (some (partial match-route? uri)
-                                           (get routes request-method))
-            {:keys [content]
-             :as   ring-response} (handler (merge ring-request
-                                             (when operation
-                                               {::operation operation})
-                                             (when params-schema
-                                               {::params-schema params-schema
-                                                ::path-params   path-params})))]
+      (let [{::keys [handler]
+             :or    {handler not-found}
+             :as    route} (some (partial match-route? uri)
+                             (get routes request-method))
+            {:as   ring-response
+             :keys [content]} (handler (match-route! route ring-request))]
         (merge (select-keys ring-response [:status :headers :body])
           (when (contains? ring-response :content)
             {:body (reify rcp/StreamableResponseBody
