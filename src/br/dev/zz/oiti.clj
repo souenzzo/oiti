@@ -8,7 +8,7 @@
     [ring.core.protocols :as rcp])
   (:import (org.snakeyaml.engine.v2.api Load LoadSettings)))
 
-;;https://spec.openapis.org/oas/3.1/schema/2022-02-27
+;; https://spec.openapis.org/oas/3.1/schema/2022-02-27
 
 (set! *warn-on-reflection* true)
 
@@ -44,7 +44,9 @@
 (defn $deref
   [document {:strs [$ref]
              :as   object}]
-  (merge (dissoc  object "$ref")
+  (merge (into {}
+           (remove (comp #{"$ref"} key))
+           object)
     (when $ref
       ($deref document (get-in document (json-pointer->path $ref))))))
 
