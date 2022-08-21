@@ -102,3 +102,12 @@
   (is (= ["paths" "/hello" "get"]
         (oiti/json-pointer->path "#/paths/~1hello/get"))))
 
+(deftest oiti-deref
+  (is (= {"a" "b"
+          "d" "e"
+          "g" "h"}
+        (oiti/$deref {"c" {"d"    "e"
+                           "$ref" "#/f"}
+                      "f" {"g" "h"}}
+          {"a"    "b"
+           "$ref" "#/c"}))))

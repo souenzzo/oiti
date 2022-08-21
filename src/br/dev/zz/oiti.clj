@@ -40,12 +40,13 @@
             (string/replace #"~1" "/")
             (string/replace #"~0" "~")))
     (rest (string/split s #"/"))))
+
 (defn $deref
   [document {:strs [$ref]
              :as   object}]
-  (if $ref
-    ($deref document (get-in document (json-pointer->path $ref)))
-    object))
+  (merge (dissoc  object "$ref")
+    (when $ref
+      ($deref document (get-in document (json-pointer->path $ref))))))
 
 
 (defn path-regex
