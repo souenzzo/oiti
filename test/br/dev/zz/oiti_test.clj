@@ -31,9 +31,9 @@
       (when headers
         {:headers headers})
       (when body
-        (let [output-stream (ByteArrayOutputStream.)
-              _ (with-open [output-stream output-stream]
-                  (rcp/write-body-to-stream body http-response output-stream))]
+        (let [output-stream (ByteArrayOutputStream.)]
+          (with-open [output-stream output-stream]
+            (rcp/write-body-to-stream body http-response output-stream))
           (with-open [rdr (io/reader (.toByteArray output-stream))]
             {:content (json/read rdr :key-fn keyword)}))))))
 

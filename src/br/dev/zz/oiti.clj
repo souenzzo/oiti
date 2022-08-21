@@ -90,7 +90,9 @@
      "required"   (vec (for [{:strs [required name]} params
                              :when required]
                          name))}))
-
+(s/fdef parameters->object-schema
+  :args (s/cat :params map?)
+  :ret (s/nilable map?))
 (defn compile-routes
   [{::keys [document handlers]}]
   (let [not-implemented (constantly {:status 503})]
@@ -134,16 +136,27 @@
                                                                      {"type" "string"})}))
                                    ::params-names  params-names})))])))))
 
+(s/fdef compile-routes
+  :args (s/cat :args (s/keys :req [::document
+                                   ::handlers]))
+  :ret (s/map-of keyword? coll?))
+
 (defn match-route!
   [{::keys [operation path-params params-schema]}
-   {:keys [uri request-method]
-    :as   ring-request}]
+   ring-request]
   (merge ring-request
     (when operation
       {::operation operation})
     (when params-schema
       {::params-schema params-schema
        ::path-params   path-params})))
+
+(s/fdef match-route!
+  :args (s/cat :args (s/keys :req [::operation]
+                       :opt [::path-params
+                             ::params-schema])
+          :ring-request map?)
+  :ret map?)
 
 (defn ->ring-handler
   [opts]
@@ -165,6 +178,5 @@
                          (json/write content w))))}))))))
 
 (s/fdef ->ring-handler
-  :args (s/cat :args (s/keys :req [::document
-                                   ::handlers]))
+  :args (s/cat :args (s/keys))
   :ret fn?)

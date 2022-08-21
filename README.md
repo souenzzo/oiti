@@ -25,31 +25,46 @@ Differently from all others ring-openapi clojure implementations, the routes are
 
 # Usage
 
+Let start with a spec file `hello-spec.yml`. This spec file defines one route, named `hello-op`.
+
+```yaml
+openapi: 3.0.0
+info: {title: hello, version: 1.0.0}
+paths:
+  /hello/{who}:
+    get:
+      operationId: hello-op
+      responses:
+        default:
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hello: {type: string}
+```
+
+Then we need to implement the `hello-op`
 
 ```clojure
 #_(require '[br.dev.zz.oiti :as oiti])
-(def openapi
-  "The OpenAPI description. It can be parsed from a YAML or JSON file with `oiti/load`"
-  {"openapi" "3.0.0",
-   "info"    {"title" "hello", "version" "1.0.0"},
-   "paths"   {"/hello/{who}" 
-              {"get" {"operationId" "hello-op"
-                      "responses"   {"default"
-                                     {"description" "ok"
-                                      "content"     {"application/json" 
-                                                     {"schema" {"type"       "object"
-                                                                "properties" {"hello" {"type" "string"}}}}}}}}}}})
+
+(defn hello-op-handler
+  [{::oiti/keys [path-params]}]
+  ;; as the path defines `who` parameter, it will be present in here.
+  ;; all other ring keys, like :uri, :request-method, will be availble too.
+  {:content {:hello (get path-params "who")}
+   :status  200})
+
 (def app-handler
-  (-> {::oiti/document openapi
-       ::oiti/handlers {"hello-op" (fn [{::oiti/keys [path-params]}]
-                                    ;; as the path defines `who` parameter, it will be present in here.
-                                    ;; all other ring keys, like :uri, :request-method, will be availble too.
-                                    {:content {:hello (get path-params "who")}
-                                     :status  200})}}
+  (-> {::oiti/document "hello-spec.yml"
+       ::oiti/handlers {"hello-op" hello-op-handler}}
     oiti/->ring-handler))
 
 (defn -main
   []
+  ;; use any ring-like server that you like
   (run-jetty handler {:port 8080}))
 ```
 
